@@ -242,51 +242,57 @@ qdODEplot_convert <- function(result){
 #' @param label relabel x and y label due to log-transform, set 10 as default
 #' @param show.legend to show legend
 #' @export
-qdODE_plot_base <- function(result,label = 10, show.legend = TRUE){
+qdODE_plot_base <- function (result, label = 10, show.legend = TRUE){
   result2 = qdODEplot_convert(result)
   plot.df2 = result2$plot.df2
   name.df = result2$name.df
   ind.name2 = result2$ind.name2
-
   p <- ggplot(plot.df2, mapping = aes_string(x = "x", y = "value")) +
-    geom_line(mapping = aes_string(group = "variable", colour = "type"), size = 1.1,
-              show.legend = show.legend) +
-    geom_text(name.df, mapping = aes_string(label = "variable", colour = "type",
-                                            x = "x", y = "value"), show.legend = FALSE) +
-    geom_hline(yintercept = 0, size = 0.5,linetype = 'dashed') +
-    scale_color_manual(
-      name = "Effect Type",
-      labels = c("Dep Effect", "All Effect", "Ind Effect"),
-      values = c("green", "blue", "red")) +
-    xlab("Habitat Index") + ylab("Niche Index") +
-    ggtitle(ind.name2) + theme_bw() +
-    theme(plot.title = element_text(hjust = 0.5))+ theme(axis.text.y = element_text(hjust = 0))
-
+    geom_line(mapping = aes_string(group = "variable", colour = "type"),
+              size = 1.1, show.legend = show.legend) + geom_text(name.df,
+                                                                 mapping = aes_string(label = "variable", colour = "type",
+                                                                                      x = "x", y = "value"), show.legend = FALSE) + geom_hline(yintercept = 0,
+                                                                                                                                               size = 0.5, linetype = "dashed") + scale_color_manual(name = "Effect Type",
+                                                                                                                                                                                                     labels = c("Dep Effect", "All Effect", "Ind Effect"),
+                                                                                                                                                                                                     values = c("#7cb107", "blue", "red")) + xlab("Habitat Index") +
+    ylab("Niche Index") + ggtitle(ind.name2) + theme_bw() +
+    theme(plot.title = element_text(hjust = 0.5)) + theme(axis.text.y = element_text(hjust = 0)) +
+    scale_x_continuous(limits = c(min(plot.df2$x), max(plot.df2$x) *
+                                    1.005), expand = expansion(mult = c(0.05, 0.1)))
   if (is.null(label)) {
-    p = p + scale_x_continuous(limits = c(min(plot.df2$x), max(plot.df2$x)*1.005))
-  } else {
+    p = p + scale_x_continuous(limits = c(min(plot.df2$x),
+                                          max(plot.df2$x) * 1.005), expand = expansion(mult = c(0.05,
+                                                                                                0.1)))
+  }
+  else {
     xlabel = ggplot_build(p)$layout$panel_params[[1]]$x.sec$breaks
     ylabel = ggplot_build(p)$layout$panel_params[[1]]$y.sec$breaks
-
-    xlabel2 = parse(text= paste(label,"^", xlabel, sep="") )
-
+    xlabel2 = paste(text = paste(label, "^", xlabel, sep = ""))
     if (0 %in% ylabel) {
-      pos0 = which(ylabel==0)
-      text=paste(label,"^", ylabel, sep="")
+      pos0 = which(ylabel == 0)
+      text = paste(label, "^", ylabel, sep = "")
       text[pos0] = "0"
-      if (any(na.omit(ylabel)<0)) {
-        pos1 = which(ylabel<0)
-        text[pos1] = paste0("-",label,"^",abs(ylabel[pos1]))
-        ylabel2 = parse(text=text)
-      } else{ylabel2 = parse(text=text)}
-    } else{
-      ylabel2 = parse(text= paste(label,"^", ylabel, sep="") )
+      if (any(na.omit(ylabel) < 0)) {
+        pos1 = which(ylabel < 0)
+        text[pos1] = paste0("-", label, "^", abs(ylabel[pos1]))
+        ylabel2 = text
+      }
+      else {
+        ylabel2 = text
+      }
     }
-    p = p + scale_x_continuous(labels = xlabel2, limits = c(min(plot.df2$x), max(plot.df2$x)*1.005)) +
-      scale_y_continuous(labels = ylabel2)+ theme(axis.text.y = element_text(hjust = 0))
+    else {
+      ylabel2 = paste(text = paste(label, "^", ylabel,
+                                   sep = ""))
+    }
+    p = p + scale_x_continuous(labels = xlabel2, limits = c(min(plot.df2$x),
+                                                            max(plot.df2$x) * 1.005), expand = expansion(mult = c(0.05,
+                                                                                                                  0.1))) + scale_y_continuous(labels = ylabel2) +
+      theme(axis.text.y = element_text(hjust = 0))
   }
   return(p)
 }
+
 
 #' @title plot all decompose plot
 #' @import ggplot2 patchwork

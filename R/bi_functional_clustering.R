@@ -301,7 +301,7 @@ bifun_clu_plot <- function(result, best.k, label = 10, degree = 1/4, show.legend
 
   par.mu = cluster.result$mu_par
   k = cluster.result$cluster_number
-  alpha = as.numeric(table(cluster.result$cluster$apply.omega..1..which.max.))
+  alpha = as.numeric(table(cluster.result$cluster[[apply.omega..1..which.max.]]))
 
   mu.fit1 = power_equation(times1_new, par.mu[,,1][1:k,])
   mu.fit2 = power_equation(times2_new, par.mu[,,2][1:k,])

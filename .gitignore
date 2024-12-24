@@ -5,3 +5,4 @@ inst/doc
 .httr-oauth
 .DS_Store
 docs
+1-build-idopNetwork-package.R

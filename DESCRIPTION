@@ -19,7 +19,7 @@ Imports: grDevices, stats, mvtnorm, orthopolynom, parallel, deSolve,
 Encoding: UTF-8
 LazyData: true
 Depends: R (>= 3.50)
-RoxygenNote: 7.2.1
+RoxygenNote: 7.3.2
 Suggests: 
     covr,
     knitr,

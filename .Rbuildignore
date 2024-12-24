@@ -7,3 +7,4 @@
 ^_pkgdown\.yml$
 ^docs$
 ^pkgdown$
+^1-build-idopNetwork-package\.R$
