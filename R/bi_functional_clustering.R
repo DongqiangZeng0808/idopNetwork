@@ -60,6 +60,35 @@ biget_par_int <- function(X, k, times1, times2, n1, n2){
 }
 
 
+#' Title
+#'
+#' @param x
+#'
+#' @return
+#' @export
+#'
+#' @examples
+logsumexp <- function(x) {
+  # 输入检查：确保 x 是数值向量
+  if (!is.numeric(x)) {
+    stop("Input x must be a numeric vector.")
+  }
+
+  # 检查是否为空向量
+  if (length(x) == 0) {
+    stop("Input x cannot be an empty vector.")
+  }
+
+  # 计算 Log-Sum-Exp
+  xmax <- max(x, na.rm = TRUE)  # 找到向量中的最大值，忽略 NA
+  result <- xmax + log(sum(exp(x - xmax), na.rm = TRUE))
+
+  # 返回结果
+  return(result)
+}
+
+
+
 #' @title main function for bifunctional clustering
 #' @param data1 matrix or data for cluster
 #' @param data2 matrix or data for cluster
@@ -76,63 +105,73 @@ biget_par_int <- function(X, k, times1, times2, n1, n2){
 #' @return the initial parameters for functional clustering
 #' @export
 bifun_clu <- function(data1, data2, k, Time1 = NULL, Time2 = NULL, trans = log10, inv.cov = NULL,
-                    initial.pars = NULL, iter.max = 1e2, parscale = 1e-3){
-  #sort from low to high
-  data1 = data1[,order(colSums(data1))]
-  data2 = data2[,order(colSums(data2))]
-  #attribute
-  data = as.matrix(cbind(data1,data2)); n = dim(data)[1]; d = dim(data)[2]
-  n1 = dim(data1)[2]; n2 = dim(data2)[2]
-  eplison = 1; iter = 0;
+                      initial.pars = NULL, iter.max = 1e2, parscale = 1e-3){
+  # 排序
+  data1 <- data1[, order(colSums(data1))]
+  data2 <- data2[, order(colSums(data2))]
+
+  # 合并数据
+  data <- as.matrix(cbind(data1, data2))
+  n <- dim(data)[1]
+  d <- dim(data)[2]
+  n1 <- dim(data1)[2]
+  n2 <- dim(data2)[2]
+
+  eplison <- 1
+  iter <- 0
+
+  # 数据转换
   if (is.null(trans)) {
-    times1 = as.numeric(colSums(data1))
-    times2 = as.numeric(colSums(data2))
-    X = data
+    times1 <- as.numeric(colSums(data1))
+    times2 <- as.numeric(colSums(data2))
+    X <- data
   } else{
-    times1 = as.numeric(trans(colSums(data1)+1));
-    times2 = as.numeric(trans(colSums(data2)+1));
-    X = trans(data+1)
+    times1 <- as.numeric(trans(colSums(data1) + 1))
+    times2 <- as.numeric(trans(colSums(data2) + 1))
+    X <- trans(data + 1)
   }
 
-  if (is.null(Time1)|is.null(Time2) ) {
-  } else{
-    times1 = as.numeric(Time1)
-    times2 = as.numeric(Time2)
+  # 覆盖时间点（如果提供）
+  if (!is.null(Time1) & !is.null(Time2)) {
+    times1 <- as.numeric(Time1)
+    times2 <- as.numeric(Time2)
   }
 
-  # initial pars
+  # 初始化参数
   if (is.null(initial.pars)) {
-    initial.pars = biget_par_int(X, k, times1, times2, n1, n2)
+    initial.pars <- biget_par_int(X, k, times1, times2, n1, n2)
   }
 
-  X1 = X[,1:n1]; X2 = X[,(n1+1):(n1+n2)]
+  X1 <- X[, 1:n1]
+  X2 <- X[, (n1 + 1):(n1 + n2)]
   par.int <- c(initial.pars$initial_cov_params, initial.pars$initial_mu_params)
   prob_log <- log(initial.pars$initial_probibality)
 
-  #parscale = par.int[2]*par.int[4]*parscale
+  # 初始化 LL.mem 和 LL.next
+  par.mu <- array(par.int[-c(1:4)], dim = c(k, 2, 2))
+  par.cov <- par.int[1:4]
+  cov1 <- get_SAD1_covmatrix(par.cov[1:2], n1)
+  cov2 <- get_SAD1_covmatrix(par.cov[3:4], n2)
+  mu1 <- power_equation(times1, par.mu[,,1][1:k, ])
+  mu2 <- power_equation(times2, par.mu[,,2][1:k, ])
+  mvn_log1 <- sapply(1:k, function(c) dmvnorm(X1, mu1[c, ], cov1, log = TRUE))
+  mvn_log2 <- sapply(1:k, function(c) dmvnorm(X2, mu2[c, ], cov2, log = TRUE))
+  mvn.log <- mvn_log1 + mvn_log2
+  mvn <- sweep(mvn.log, 2, FUN = '+', STATS = prob_log)
 
-  while( abs(eplison) > 1e-3 && iter <= iter.max ){
-    #E step
-    par.mu <- array(par.int[-c(1:4)], dim = c(k,2,2))
-    par.cov = par.int[1:4]
-    cov1 = get_SAD1_covmatrix(par.cov[1:2], n1)
-    cov2 = get_SAD1_covmatrix(par.cov[3:4], n2)
-    mu1 <- power_equation(times1, par.mu[,,1][1:k,])
-    mu2 <- power_equation(times2, par.mu[,,2][1:k,])
-    mvn_log1 <- sapply(1:k, function(c) dmvnorm(X1, mu1[c,], cov1, log = T))
-    mvn_log2 <- sapply(1:k, function(c) dmvnorm(X2, mu2[c,], cov2, log = T))
+  omega_log <- t(sapply(1:n, function(c) mvn[c, ] - logsumexp(mvn[c, ]) ))
+  omega <- exp(omega_log)
 
-    mvn_log = mvn_log1 + mvn_log2
-    mvn = sweep(mvn_log, 2, FUN = '+', STATS =  prob_log )
+  LL.mem <- biQ_function(par = par.int, prob_log = prob_log, omega_log, X, k, n1, n2, times1, times2)
+  LL.next <- LL.mem  # 初始化 LL.next
 
-    omega_log = t(sapply(1:n, function(c) mvn[c,] - logsumexp(mvn[c,]) ))
-    omega = exp(omega_log)
+  # 初始化 par.hat
+  par.hat <- par.int
 
-    LL.mem <- biQ_function(par = par.int, prob_log = prob_log, omega_log, X, k, n1, n2, times1, times2)
-
-    #M step
-    prob_exp = apply(omega_log, 2, logsumexp)
-    prob_log = prob_exp - log(n)
+  while(abs(eplison) > 1e-3 && iter <= iter.max ){
+    # M step
+    prob_exp <- apply(omega_log, 2, logsumexp)
+    prob_log <- prob_exp - log(n)
 
     Q.maximization <- try(optim(par = par.int, biQ_function,
                                 prob_log = prob_log,
@@ -150,22 +189,46 @@ bifun_clu <- function(data1, data2, k, Time1 = NULL, Time2 = NULL, trans = log10
                                                parscale = c(rep(parscale,4),rep(1,4*k)),
                                                maxit = 1e2
                                 )))
-    if ('try-error' %in% class(Q.maximization))
+    if ('try-error' %in% class(Q.maximization)) {
+      cat("Optimization failed at iteration", iter + 1, "\n")
       break
+    }
+
+    # 更新参数
     par.hat <- Q.maximization$par
-    par.int = par.hat
+    par.int <- par.hat
+
+    # E step
+    par.mu <- array(par.int[-c(1:4)], dim = c(k, 2, 2))
+    par.cov <- par.int[1:4]
+    cov1 <- get_SAD1_covmatrix(par.cov[1:2], n1)
+    cov2 <- get_SAD1_covmatrix(par.cov[3:4], n2)
+    mu1 <- power_equation(times1, par.mu[,,1][1:k, ])
+    mu2 <- power_equation(times2, par.mu[,,2][1:k, ])
+    mvn_log1 <- sapply(1:k, function(c) dmvnorm(X1, mu1[c, ], cov1, log = TRUE))
+    mvn_log2 <- sapply(1:k, function(c) dmvnorm(X2, mu2[c, ], cov2, log = TRUE))
+
+    mvn.log <- mvn_log1 + mvn_log2
+    mvn <- sweep(mvn.log, 2, FUN = '+', STATS = prob_log )
+
+    omega_log <- t(sapply(1:n, function(c) mvn[c, ] - logsumexp(mvn[c, ]) ))
+    omega <- exp(omega_log)
+
     LL.next <- biQ_function(par = par.int, prob_log = prob_log, omega_log, X, k, n1, n2, times1, times2)
-    eplison <-  LL.next - LL.mem
+
+    eplison <- LL.next - LL.mem
     LL.mem <- LL.next
-    iter = iter + 1
+    iter <- iter + 1
 
     cat("\n", "iter =", iter, "\n", "Log-Likelihood = ", LL.next, "\n")
   }
-  AIC = 2*(LL.next) + 2*(length(par.hat)+k-1)
-  BIC = 2*(LL.next) + log(n)*(length(par.hat)+k-1)
 
-  omega = exp(omega_log)
-  X.clustered <- data.frame(X, apply(omega,1,which.max),check.names = F)
+  # 计算 AIC 和 BIC
+  AIC <- 2 * (LL.next) + 2 * (length(par.hat) + k - 1)
+  BIC <- 2 * (LL.next) + log(n) * (length(par.hat) + k - 1)
+
+  omega <- exp(omega_log)
+  X.clustered <- data.frame(X, apply(omega, 1, which.max), check.names = FALSE)
 
   return_obj <- list(cluster_number = k,
                      Log_likelihodd = LL.mem,
@@ -176,7 +239,7 @@ bifun_clu <- function(data1, data2, k, Time1 = NULL, Time2 = NULL, trans = log10
                      probibality = exp(prob_log),
                      omega = omega,
                      cluster = X.clustered,
-                     cluster2 = data.frame(data, apply(omega,1,which.max), check.names = F),
+                     cluster2 = data.frame(data, apply(omega, 1, which.max), check.names = FALSE),
                      Time1 = times1,
                      Time2 = times2,
                      original_data = data)
@@ -222,55 +285,76 @@ bifun_clu_parallel <- function(data1, data2, Time1 = NULL, Time2 = NULL, trans =
 #' @return list contain module data and fitted data
 #' @export
 bifun_clu_convert <- function(result, best.k){
-  cluster.result = result[[which(sapply( result , "[[" , 'cluster_number' )==best.k)]]
+  # 找到最佳 k 的聚类结果
+  idx <- which(sapply(result, function(x) x$cluster_number) == best.k)
+  if(length(idx) == 0){
+    stop(paste("No clustering result found for k =", best.k))
+  }
+  cluster.result <- result[[idx]]
 
-  times = cluster.result$Time1
-  times_new = seq(min(times),max(times),length = 30)
+  # 使用正确的分组列名
+  group_col <- "apply(omega, 1, which.max)"
+  if(!group_col %in% colnames(cluster.result$cluster2)){
+    stop(paste("The column", group_col, "does not exist in cluster2"))
+  }
 
-  n1 = length(times);n2 = length(cluster.result$Time2)
-  par.mu = cluster.result$mu_par[,,1]
-  colnames(par.mu) = c("a","b")
-  rownames(par.mu) = paste0("M",1:best.k)
+  # 处理第一个数据集（a）
+  times <- cluster.result$Time1
+  times_new <- seq(min(times), max(times), length = 30)
 
-  k = cluster.result$cluster_number
-  mu.fit = power_equation(times_new, par.mu[1:k,])
-  colnames(mu.fit) = times_new
-  rownames(mu.fit) = paste0("M",1:best.k)
+  n1 <- length(times)
+  n2 <- length(cluster.result$Time2)
+  par.mu <- cluster.result$mu_par[,,1]
+  colnames(par.mu) <- c("a","b")
+  rownames(par.mu) <- paste0("M",1:best.k)
 
-  df = cluster.result$cluster2[,c(1:n1,(n1+n2+1))]
-  tmp = split(df,df$apply.omega..1..which.max.)
-  tmp2 = lapply(tmp, function(x) { x["apply.omega..1..which.max."] <- NULL; x })
+  k <- cluster.result$cluster_number
+  mu.fit <- power_equation(times_new, par.mu[1:k,])
+  colnames(mu.fit) <- times_new
+  rownames(mu.fit) <- paste0("M",1:best.k)
 
-  a = list(original_data = mu.fit,
-           trans_data = mu.fit,
-           power_par = par.mu,
-           power_fit = mu.fit,
-           Module.all = tmp2)
+  df <- cluster.result$cluster2[,c(1:n1, (n1+n2+1))]
+  tmp <- split(df, cluster.result$cluster2[[group_col]])
+  tmp2 <- lapply(tmp, function(x) { x[[group_col]] <- NULL; x })
 
-  times = cluster.result$Time2
-  times_new = seq(min(times),max(times),length = 30)
+  a <- list(
+    original_data = mu.fit,
+    trans_data = mu.fit,
+    power_par = par.mu,
+    power_fit = mu.fit,
+    Module.all = tmp2
+  )
 
-  par.mu = cluster.result$mu_par[,,2]
-  colnames(par.mu) = c("a","b")
-  rownames(par.mu) = paste0("M",1:best.k)
+  # 处理第二个数据集（b）
+  times <- cluster.result$Time2
+  times_new <- seq(min(times), max(times), length = 30)
 
-  k = cluster.result$cluster_number
-  mu.fit = power_equation(times_new, par.mu[1:k,])
-  colnames(mu.fit) = times_new
-  rownames(mu.fit) = paste0("M",1:best.k)
+  par.mu <- cluster.result$mu_par[,,2]
+  colnames(par.mu) <- c("a","b")
+  rownames(par.mu) <- paste0("M",1:best.k)
 
-  df = cluster.result$cluster2[,c((n1+1):(n1+n2+1))]
-  tmp = split(df,df$apply.omega..1..which.max.)
-  tmp2 = lapply(tmp, function(x) { x["apply.omega..1..which.max."] <- NULL; x })
+  k <- cluster.result$cluster_number
+  mu.fit <- power_equation(times_new, par.mu[1:k,])
+  colnames(mu.fit) <- times_new
+  rownames(mu.fit) <- paste0("M",1:best.k)
 
-  b = list(original_data = mu.fit,
-           trans_data = mu.fit,
-           power_par = par.mu,
-           power_fit = mu.fit,
-           Module.all = tmp2)
-  return_obj = list(a = a, b = b)
+  df <- cluster.result$cluster2[,c((n1+1):(n1+n2+1))]
+  tmp <- split(df, cluster.result$cluster2[[group_col]])
+  tmp2 <- lapply(tmp, function(x) { x[[group_col]] <- NULL; x })
+
+  b <- list(
+    original_data = mu.fit,
+    trans_data = mu.fit,
+    power_par = par.mu,
+    power_fit = mu.fit,
+    Module.all = tmp2
+  )
+
+  return_obj <- list(a = a, b = b)
   return(return_obj)
 }
+
+
 
 #' @title bifunctional clustering plot
 #' @param result list directly from bifun_clu_parallel function
@@ -288,7 +372,7 @@ bifun_clu_convert <- function(result, best.k){
 bifun_clu_plot <- function(result, best.k, label = 10, degree = 1/4, show.legend = FALSE,
                            color1 = "#38E54D", color2 = "#FF8787"){
   cluster.result = result[[which(sapply( result , "[[" , 'cluster_number' )==best.k)]]
-  kk = length(table(cluster.result$cluster$apply.omega..1..which.max.))
+  kk = length(table(cluster.result$cluster$`apply(omega, 1, which.max)`))
   if ( kk!= best.k) stop("Please use a smaller k or rerun functional clustering")
 
   times1 = cluster.result$Time1
@@ -301,7 +385,7 @@ bifun_clu_plot <- function(result, best.k, label = 10, degree = 1/4, show.legend
 
   par.mu = cluster.result$mu_par
   k = cluster.result$cluster_number
-  alpha = as.numeric(table(cluster.result$cluster[[apply.omega..1..which.max.]]))
+  alpha = as.numeric(table(cluster.result$cluster$`apply(omega, 1, which.max)`))
 
   mu.fit1 = power_equation(times1_new, par.mu[,,1][1:k,])
   mu.fit2 = power_equation(times2_new, par.mu[,,2][1:k,])
